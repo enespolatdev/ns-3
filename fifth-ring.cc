@@ -22,25 +22,14 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("FifthScriptExample2");
 
-/
-
-/**
- * Congestion window change callback
- *
- * \param oldCwnd Old congestion window.
- * \param newCwnd New congestion window.
- */
+// Congestion window değişimi callback
 static void
 CwndChange(uint32_t oldCwnd, uint32_t newCwnd)
 {
     NS_LOG_UNCOND(Simulator::Now().GetSeconds() << "\t" << newCwnd);
 }
 
-/**
- * Rx drop callback
- *
- * \param p The dropped packet.
- */
+// Paket düşme callback
 static void
 RxDrop(Ptr<const Packet> p)
 {
@@ -56,14 +45,7 @@ main(int argc, char* argv[])
     cmd.AddValue("mAlgo", "Congestion control algorithm", mAlgo);
     cmd.AddValue("mTime", "Simulation time", mTime);
     cmd.Parse(argc, argv);
-    //std::cout << "Congestion control algorithm: " << mAlgo << std::endl;
 
-    // In the following three lines, TCP NewReno is used as the congestion
-    // control algorithm, the initial congestion window of a TCP connection is
-    // set to 1 packet, and the classic fast recovery algorithm is used. Note
-    // that this configuration is used only to demonstrate how TCP parameters
-    // can be configured in ns-3. Otherwise, it is recommended to use the default
-    // settings of TCP in ns-3.
     Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue("ns3::"+mAlgo)); 
     Config::SetDefault("ns3::TcpSocket::InitialCwnd", UintegerValue(1));
     Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
@@ -72,35 +54,25 @@ main(int argc, char* argv[])
     NodeContainer allNodes, nodes01, nodes12, nodes23, nodes30;
     allNodes.Create(4);
 
-    nodes01.Add(allNodes.Get(0));
-    nodes01.Add(allNodes.Get(1));
-
-    nodes12.Add(allNodes.Get(1));
-    nodes12.Add(allNodes.Get(2));
-
-    nodes23.Add(allNodes.Get(2));
-    nodes23.Add(allNodes.Get(3));
-
-    nodes30.Add(allNodes.Get(3));
-    nodes30.Add(allNodes.Get(0));
+    nodes01.Add(allNodes.Get(0)); nodes01.Add(allNodes.Get(1));
+    nodes12.Add(allNodes.Get(1)); nodes12.Add(allNodes.Get(2));
+    nodes23.Add(allNodes.Get(2)); nodes23.Add(allNodes.Get(3));
+    nodes30.Add(allNodes.Get(3)); nodes30.Add(allNodes.Get(0));
 
     PointToPointHelper pointToPoint;
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
     pointToPoint.SetChannelAttribute("Delay", StringValue("2ms"));
 
-    NetDeviceContainer devices01, devices02, devices03, devices04;
+    NetDeviceContainer devices01, devices12, devices23, devices30;
     devices01 = pointToPoint.Install(nodes01);
-    devices02 = pointToPoint.Install(nodes12);
-    devices03 = pointToPoint.Install(nodes23);
-    devices04 = pointToPoint.Install(nodes30);
-    
+    devices12 = pointToPoint.Install(nodes12);
+    devices23 = pointToPoint.Install(nodes23);
+    devices30 = pointToPoint.Install(nodes30);
 
     Ptr<RateErrorModel> em = CreateObject<RateErrorModel>();
     em->SetAttribute("ErrorRate", DoubleValue(0.00001));
     devices01.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-    devices02.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-    //devices03.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-    //devices04.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
+    devices12.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
 
     InternetStackHelper stack;
     stack.Install(allNodes);
@@ -110,36 +82,31 @@ main(int argc, char* argv[])
     Ipv4InterfaceContainer interfaces01 = address.Assign(devices01);
 
     address.SetBase("10.1.2.0", "255.255.255.252");
-    Ipv4InterfaceContainer interfaces02 = address.Assign(devices02);
+    Ipv4InterfaceContainer interfaces12 = address.Assign(devices12);
 
     address.SetBase("10.1.3.0", "255.255.255.252");
-    Ipv4InterfaceContainer interfaces03 = address.Assign(devices03);
+    Ipv4InterfaceContainer interfaces23 = address.Assign(devices23);
 
     address.SetBase("10.1.4.0", "255.255.255.252");
-    Ipv4InterfaceContainer interfaces04 = address.Assign(devices04);
+    Ipv4InterfaceContainer interfaces30 = address.Assign(devices30);
 
     uint16_t sinkPort = 8080;
     Address sinkAddress(InetSocketAddress(interfaces01.GetAddress(1), sinkPort));
 
-    // server
     PacketSinkHelper packetSinkHelper("ns3::TcpSocketFactory",
                                       InetSocketAddress(Ipv4Address::GetAny(), sinkPort));
     ApplicationContainer sinkApps = packetSinkHelper.Install(allNodes.Get(1));
     sinkApps.Start(Seconds(0.));
     sinkApps.Stop(Seconds(mTime));
 
-    //socket
     Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(allNodes.Get(0), TcpSocketFactory::GetTypeId());
     ns3TcpSocket->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&CwndChange));
 
-    //client
     Ptr<TutorialApp> app = CreateObject<TutorialApp>();
     app->Setup(ns3TcpSocket, sinkAddress, 1040, 1000, DataRate("1Mbps"));
     allNodes.Get(0)->AddApplication(app);
     app->SetStartTime(Seconds(1.));
     app->SetStopTime(Seconds(mTime));
-
-    //devices01.Get(1)->TraceConnectWithoutContext("PhyRxDrop", MakeCallback(&RxDrop));
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
